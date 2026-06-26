@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工作管理器</title>
+<style>
+  :root {
+    --c-blue-50: #E6F1FB; --c-blue-100: #B5D4F4; --c-blue-200: #85B7EB;
+    --c-blue-400: #378ADD; --c-blue-600: #185FA5; --c-blue-800: #0C447C;
+    --c-red-50: #FCEBEB; --c-red-400: #E24B4A; --c-red-600: #A32D2D; --c-red-800: #791F1F;
+    --c-green-50: #EAF3DE; --c-green-600: #3B6D11; --c-green-800: #27500A;
+    --c-amber-50: #FAEEDA; --c-amber-100: #F5DBB3; --c-amber-400: #D4990E; --c-amber-600: #854F0B; --c-amber-800: #6B3E08;
+    --c-gray-50: #F1EFE8; --c-gray-100: #D3D1C7; --c-gray-200: #B4B2A9;
+    --c-gray-400: #888780; --c-gray-600: #5F5E5A; --c-gray-800: #444441; --c-gray-900: #2C2C2A;
+    --bg: #F5F4F0; --card: #fff;
+    --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); min-height: 100vh; color: var(--c-gray-900); font-size: 14px;
+  }
+
+  .app { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr; min-height: 100vh; }
+  .topbar {
+    grid-column: 1 / -1; background: var(--card);
+    border-bottom: 0.5px solid rgba(0,0,0,.1);
+    display: flex; align-items: center; padding: 0 24px; height: 56px; gap: 12px;
+  }
+  .topbar h1 { font-size: 15px; font-weight: 500; flex: 1; }
+  .topbar .conn { font-size: 11px; color: var(--c-green-600); background: var(--c-green-50); padding: 3px 10px; border-radius: 20px; cursor: pointer; }
+  .topbar .conn.off { color: var(--c-red-600); background: var(--c-red-50); animation: pulse-conn 2s infinite; }
+  @keyframes pulse-conn { 0%,100%{opacity:1} 50%{opacity:.6} }
+  .sidebar {
+    background: var(--card); border-right: 0.5px solid rgba(0,0,0,.1);
+    padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
+  }
+  .main { padding: 24px 28px; overflow-y: auto; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; border-radius: var(--radius-md); padding: 7px 16px;
+    font-size: 13px; font-family: inherit; cursor: pointer; transition: background .15s, opacity .15s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--c-blue-600); color: #fff; }
+  .btn-primary:hover { background: var(--c-blue-800); }
+  .btn-ghost { background: transparent; color: var(--c-gray-800); border: 0.5px solid rgba(0,0,0,.18); }
+  .btn-ghost:hover { background: var(--c-gray-50); }
+  .btn-danger { background: var(--c-red-600); color: #fff; }
+  .btn-danger:hover { background: var(--c-red-800); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-icon {
+    background: transparent; border: none; cursor: pointer; color: var(--c-gray-400);
+    padding: 4px; border-radius: 6px; font-size: 15px; line-height: 1;
+    transition: color .15s, background .15s;
+  }
+  .btn-icon:hover { background: var(--c-gray-50); color: var(--c-gray-900); }
+  .btn-icon.del:hover { color: var(--c-red-600); background: var(--c-red-50); }
+  .btn-icon.play { color: var(--c-blue-600); font-size: 14px; }
+  .btn-icon.play:hover { background: var(--c-blue-50); color: var(--c-blue-800); }
+
+  /* ── Timer ── */
+  .timer-card {
+    background: var(--card); border: 0.5px solid rgba(0,0,0,.1);
+    border-radius: var(--radius-xl); padding: 20px 16px; text-align: center;
+    transition: border-color .3s;
+  }
+  .timer-card.overtime { border-color: var(--c-amber-400); background: #FFFDF7; }
+  .timer-label { font-size: 11px; color: var(--c-gray-400); margin-bottom: 10px; letter-spacing: .04em; }
+  .timer-face {
+    font-size: 48px; font-weight: 500; font-variant-numeric: tabular-nums;
+    color: var(--c-blue-600); line-height: 1; margin-bottom: 10px;
+  }
+  .timer-face.urgent { color: var(--c-red-600); }
+  .timer-face.overtime { color: var(--c-amber-600); }
+  .timer-face.paused { opacity: .45; }
+  .prog-bg { height: 4px; background: var(--c-blue-50); border-radius: 2px; margin-bottom: 14px; overflow: hidden; }
+  .prog-fill { height: 100%; background: var(--c-blue-400); border-radius: 2px; }
+  .prog-fill.urgent { background: var(--c-red-400); }
+  .prog-fill.overtime { background: var(--c-amber-400); }
+  .timer-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .timer-btns .btn { flex: 1; min-width: 0; font-size: 11px; padding: 5px 8px; }
+
+  .cur-box { background: var(--c-blue-50); border-radius: var(--radius-md); padding: 12px; }
+  .cur-label { font-size: 10px; color: var(--c-blue-600); font-weight: 500; margin-bottom: 4px; letter-spacing: .04em; }
+  .cur-name { font-size: 13px; font-weight: 500; color: var(--c-blue-800); line-height: 1.4; word-break: break-word; }
+  .cur-name.empty { color: var(--c-gray-400); font-weight: 400; }
+  .cur-time-stats { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .cur-time-stat {
+    font-size: 11px; display: flex; align-items: center; gap: 4px;
+    padding: 1px 8px; border-radius: 20px;
+  }
+  .cur-time-stat.focus { background: var(--c-blue-50); color: var(--c-blue-600); }
+  .cur-time-stat.ot { background: var(--c-amber-50); color: var(--c-amber-600); }
+  .cur-time-stat.total { background: var(--c-gray-50); color: var(--c-gray-900); font-weight: 500; }
+
+  .toggle-row {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--c-gray-600); padding: 8px 12px;
+    border-radius: var(--radius-md); background: var(--c-gray-50);
+  }
+  .toggle-row label { flex: 1; cursor: pointer; }
+  .sw { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .sw-track { position: absolute; inset: 0; background: var(--c-gray-100); border-radius: 10px; cursor: pointer; transition: background .2s; }
+  .sw input:checked + .sw-track { background: var(--c-blue-400); }
+  .sw-knob { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: left .2s; pointer-events: none; }
+  .sw input:checked ~ .sw-knob { left: 19px; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { border-radius: var(--radius-md); padding: 12px; text-align: center; }
+  .stat-label { font-size: 11px; margin-bottom: 4px; }
+  .stat-num { font-size: 22px; font-weight: 500; }
+  .stat-total { background: var(--c-gray-50); }
+  .stat-total .stat-label { color: var(--c-gray-400); }
+  .stat-total .stat-num { color: var(--c-gray-900); }
+  .stat-done { background: var(--c-green-50); }
+  .stat-done .stat-label { color: var(--c-green-600); }
+  .stat-done .stat-num { color: var(--c-green-800); }
+
+  .sec-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .sec-hd h2 { font-size: 14px; font-weight: 500; flex: 1; }
+  .badge { background: var(--c-blue-50); color: var(--c-blue-600); border-radius: 20px; font-size: 11px; font-weight: 500; padding: 2px 10px; }
+
+  .filters { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .chip {
+    padding: 5px 14px; border-radius: 20px; border: 0.5px solid rgba(0,0,0,.12);
+    background: var(--card); font-size: 12px; cursor: pointer;
+    color: var(--c-gray-600); transition: all .15s; font-family: inherit;
+  }
+  .chip.on { background: var(--c-blue-600); color: #fff; border-color: transparent; }
+  .date-filter {
+    padding: 5px 10px; border-radius: 20px; border: 0.5px solid rgba(0,0,0,.12);
+    background: var(--card); font-size: 12px; cursor: pointer; color: var(--c-gray-600);
+    font-family: inherit; margin-left: auto; outline: none;
+  }
+  .date-filter:focus { border-color: var(--c-blue-400); }
+
+  /* ── 顶部全局状态条 (P1-1) ── */
+  .topbar-status {
+    display: flex; align-items: center; gap: 8px; padding: 4px 12px;
+    border-radius: 20px; font-size: 12px; cursor: pointer; transition: all .15s;
+    max-width: 360px; overflow: hidden;
+  }
+  .topbar-status.off { display: none; }
+  .topbar-status .ts-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; animation: pulse 1.5s ease-in-out infinite alternate; }
+  .topbar-status .ts-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-gray-700); }
+  .topbar-status .ts-time { font-variant-numeric: tabular-nums; font-weight: 500; flex-shrink: 0; }
+  .topbar-status.ts-running { background: var(--c-blue-50); color: var(--c-blue-600); }
+  .topbar-status.ts-running .ts-dot { background: var(--c-blue-500); }
+  .topbar-status.ts-over { background: var(--c-amber-50); color: var(--c-amber-600); }
+  .topbar-status.ts-over .ts-dot { background: var(--c-amber-500); }
+  .topbar-status.ts-paused { background: var(--c-gray-100); color: var(--c-gray-500); }
+  .topbar-status.ts-paused .ts-dot { background: var(--c-gray-400); animation: none; }
+  .topbar-status:hover { opacity: .85; }
+
+  /* ── 今日时间线 (P0-2 + P1-3) ── */
+  .timeline-sec { margin-bottom: 24px; }
+  .tl-list { display: flex; flex-direction: column; gap: 6px; }
+  .tl-row { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+  .tl-time { color: var(--c-gray-400); font-variant-numeric: tabular-nums; width: 92px; flex-shrink: 0; }
+  .tl-bar-wrap { flex: 1; height: 18px; background: var(--c-gray-50); border-radius: 4px; position: relative; min-width: 80px; }
+  .tl-bar { position: absolute; top: 0; height: 100%; border-radius: 4px; min-width: 6px; }
+  .tl-bar.tl-high { background: var(--c-red-400); }
+  .tl-bar.tl-mid { background: var(--c-blue-400); }
+  .tl-bar.tl-low { background: var(--c-green-400); }
+  .tl-name { width: 140px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-gray-700); }
+  .tl-stats { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .tl-actual { color: var(--c-gray-500); }
+  .tl-diff { font-weight: 500; }
+  .tl-diff.tl-over { color: var(--c-amber-600); }
+  .tl-diff.tl-under { color: var(--c-green-600); }
+  .tl-diff.tl-ok { color: var(--c-gray-400); }
+
+  .tasks { display: flex; flex-direction: column; gap: 8px; }
+  .tcard {
+    background: var(--card); border: 0.5px solid rgba(0,0,0,.1);
+    border-radius: var(--radius-lg); padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
+    transition: border-color .15s; position: relative;
+  }
+  .tcard:hover { border-color: rgba(0,0,0,.2); }
+  .tcard.active { border-color: var(--c-blue-400); background: #F7FAFE; }
+  .tcard.done { opacity: .45; }
+  .tcard.done .t-title { text-decoration: line-through; }
+  .tcheck {
+    width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--c-gray-100);
+    flex-shrink: 0; margin-top: 1px; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: all .15s;
+  }
+  .tcheck.checked { background: var(--c-blue-400); border-color: var(--c-blue-400); }
+  .tcheck.checked::after {
+    content: ''; width: 8px; height: 5px;
+    border-left: 1.5px solid #fff; border-bottom: 1.5px solid #fff;
+    transform: rotate(-45deg) translateY(-1px);
+  }
+  .tbody { flex: 1; min-width: 0; cursor: pointer; }
+  .t-title { font-size: 14px; font-weight: 500; color: var(--c-gray-900); margin-bottom: 3px; word-break: break-word; }
+  .t-desc { font-size: 12px; color: var(--c-gray-400); line-height: 1.5; word-break: break-word; }
+  .t-times { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  .t-time {
+    font-size: 11px; display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 8px; border-radius: 20px;
+  }
+  .t-time.total { background: var(--c-gray-50); color: var(--c-gray-900); font-weight: 500; }
+  .t-time.focus { background: var(--c-blue-50); color: var(--c-blue-600); }
+  .t-time.ot { background: var(--c-amber-50); color: var(--c-amber-600); }
+  .t-time.boxhist { background: var(--c-green-50); color: var(--c-green-600); font-size: 10px; }
+  .t-created { font-size: 11px; color: var(--c-gray-200); margin-top: 5px; }
+  .t-date { font-size: 11px; color: var(--c-gray-400); margin-top: 5px; }
+
+  .pri { font-size: 11px; padding: 2px 9px; border-radius: 20px; }
+  .pri-high { background: var(--c-red-50); color: var(--c-red-600); }
+  .pri-mid { background: var(--c-amber-50); color: var(--c-amber-600); }
+  .pri-low { background: var(--c-green-50); color: var(--c-green-600); }
+  .tactions { display: flex; gap: 2px; align-items: center; }
+  .star-btn { font-size: 14px; }
+  .star-btn.on { color: var(--c-blue-600); }
+  .empty { text-align: center; color: var(--c-gray-200); padding: 48px 20px; font-size: 13px; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; padding: 20px;
+  }
+  .overlay.off { display: none; }
+  .modal {
+    background: var(--card); border-radius: var(--radius-xl); padding: 24px;
+    width: 100%; max-width: 440px; box-shadow: 0 12px 40px rgba(0,0,0,.15);
+    animation: modalIn .2s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .modal h3 { font-size: 15px; font-weight: 500; margin-bottom: 18px; }
+  .field { margin-top: 14px; }
+  .field:first-of-type { margin-top: 0; }
+  .field label { display: block; font-size: 12px; color: var(--c-gray-600); margin-bottom: 6px; }
+  .field input, .field textarea, .field select {
+    width: 100%; border: 0.5px solid rgba(0,0,0,.18); border-radius: var(--radius-md);
+    padding: 9px 12px; font-size: 14px; font-family: inherit; outline: none;
+    transition: border-color .15s; background: #fff; color: var(--c-gray-900);
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--c-blue-400); }
+  .field textarea { resize: vertical; min-height: 72px; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; margin-top: 0; }
+  .modal-foot { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+
+  .switch-confirm {
+    position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
+    background: var(--card); border: 0.5px solid rgba(0,0,0,.1);
+    border-radius: var(--radius-lg); padding: 12px 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    z-index: 1100; font-size: 12px; color: var(--c-gray-600);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .switch-confirm.off { display: none; }
+  .switch-confirm button { padding: 5px 12px; font-size: 11px; }
+
+
+  .reminder {
+    position: fixed; top: 20px; right: 20px; width: 340px;
+    background: var(--card); border: 0.5px solid rgba(0,0,0,.1);
+    border-radius: var(--radius-xl); box-shadow: 0 8px 32px rgba(0,0,0,.16);
+    z-index: 2000; overflow: hidden; animation: slideIn .35s cubic-bezier(.22,1,.36,1);
+  }
+  .reminder.off { display: none; }
+  @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .rem-head { background: var(--c-amber-800); color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
+  .rem-bell { width: 22px; height: 22px; border: 2px solid rgba(255,255,255,.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; animation: pulse 1s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: .6; } to { opacity: 1; } }
+  .rem-info { flex: 1; }
+  .rem-title { font-size: 13px; font-weight: 500; }
+  .rem-sub { font-size: 11px; opacity: .7; }
+  .rem-close { background: transparent; border: none; color: rgba(255,255,255,.6); font-size: 18px; cursor: pointer; padding: 0 2px; border-radius: 4px; transition: color .15s; line-height: 1; }
+  .rem-close:hover { color: #fff; }
+  .rem-body { padding: 16px; }
+  .rem-task { font-size: 14px; font-weight: 500; color: var(--c-gray-900); margin-bottom: 6px; }
+  .rem-desc { font-size: 12px; color: var(--c-gray-400); line-height: 1.5; margin-bottom: 14px; }
+  .rem-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .rem-btns .btn { flex: 1; min-width: 80px; }
+
+  .fw-badge {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--c-blue-600); color: #fff;
+    padding: 8px 16px; border-radius: var(--radius-lg);
+    font-size: 12px; font-weight: 500; z-index: 1500;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    cursor: pointer; transition: opacity .3s;
+  }
+  .fw-badge.off { display: none; }
+  .fw-badge:hover { opacity: .85; }
+  .fw-badge-dot { width: 8px; height: 8px; background: #4ADE80; border-radius: 50%; animation: pulse 1.5s ease-in-out infinite alternate; }
+
+  .toast-wrap { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast {
+    background: var(--c-gray-900); color: #fff; padding: 10px 20px;
+    border-radius: var(--radius-md); font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    animation: toastIn .25s ease, toastOut .3s ease 2.2s forwards;
+  }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(-8px); } }
+
+  /* ── Music Player ── */
+  .music-section {
+    background: var(--card); border: 0.5px solid rgba(0,0,0,.1);
+    border-radius: var(--radius-lg); overflow: hidden; margin-top: 16px;
+  }
+  .music-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; cursor: pointer; -webkit-user-select: none; user-select: none;
+    font-size: 13px; color: var(--c-gray-600); font-weight: 500;
+    transition: background .15s;
+  }
+  .music-header:hover { background: var(--c-gray-50); }
+  .music-header .arrow { transition: transform .2s; font-size: 10px; color: var(--c-gray-400); }
+  .music-header .arrow.open { transform: rotate(90deg); }
+  .music-header .now-playing { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--c-gray-400); }
+  .music-body { padding: 0 14px 14px; display: none; }
+  .music-body.open { display: block; }
+  .music-controls {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .music-btn {
+    background: transparent; border: none; cursor: pointer; color: var(--c-gray-600);
+    padding: 4px; border-radius: 6px; font-size: 16px; line-height: 1;
+    transition: color .15s, background .15s;
+  }
+  .music-btn:hover { background: var(--c-gray-50); color: var(--c-gray-900); }
+  .music-btn.play { color: var(--c-blue-600); font-size: 20px; }
+  .music-btn.play:hover { color: var(--c-blue-800); }
+  .music-volume {
+    display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--c-gray-400);
+  }
+  .music-volume input[type=range] {
+    flex: 1; height: 3px; -webkit-appearance: none; appearance: none;
+    background: var(--c-gray-100); border-radius: 2px; outline: none;
+  }
+  .music-volume input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px;
+    background: var(--c-blue-400); border-radius: 50%; cursor: pointer;
+  }
+  .music-track-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; max-height: 180px; overflow-y: auto; }
+  .music-track {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: var(--radius-md); cursor: pointer;
+    font-size: 12px; color: var(--c-gray-600); transition: background .15s;
+  }
+  .music-track:hover { background: var(--c-gray-50); }
+  .music-track.active { background: var(--c-blue-50); color: var(--c-blue-600); font-weight: 500; }
+  .music-track .track-num { width: 16px; text-align: center; font-size: 10px; color: var(--c-gray-400); flex-shrink: 0; }
+  .music-track.active .track-num { color: var(--c-blue-400); }
+  .music-track .track-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .music-track .track-artist { font-size: 10px; color: var(--c-gray-400); flex-shrink: 0; }
+  .music-progress {
+    height: 3px; background: var(--c-gray-100); border-radius: 2px;
+    margin-bottom: 6px; cursor: pointer; position: relative;
+  }
+  .music-progress-fill { height: 100%; background: var(--c-blue-400); border-radius: 2px; transition: width .1s linear; }
+  .music-time { display: flex; justify-content: space-between; font-size: 10px; color: var(--c-gray-400); margin-bottom: 8px; }
+  .music-loop {
+    display: flex; gap: 6px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 0.5px solid rgba(0,0,0,.08);
+  }
+  .music-loop-btn {
+    font-size: 11px; color: var(--c-gray-600); cursor: pointer;
+    padding: 4px 10px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,.12);
+    background: transparent; transition: background .15s;
+  }
+  .music-loop-btn:hover { background: var(--c-gray-50); }
+  .music-loop-btn.active { background: var(--c-blue-50); color: var(--c-blue-600); border-color: var(--c-blue-200); }
+
+
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <h1>工作管理器</h1>
+    <div class="topbar-status off" id="topbarStatus" onclick="App.scrollToSidebar()"></div>
+    <span class="conn off" id="connBadge" onclick="App.retryConnect()" title="点击重试连接">离线</span>
+    <button class="btn btn-ghost btn-sm" id="btnFloat" onclick="App.floatShow()">悬浮窗</button>
+    <button class="btn btn-primary btn-sm" onclick="App.modalOpen()">+ 新任务</button>
+  </header>
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main" id="mainArea">
+    <div id="timeline" class="timeline-sec"></div>
+    <div id="taskList"></div>
+  </main>
+</div>
+
+<div class="overlay off" id="overlay"></div>
+<div class="reminder off" id="reminder"></div>
+<div class="switch-confirm off" id="switchConfirm"></div>
+<div class="fw-badge off" id="fwBadge" onclick="App.floatFocus()">
+  <span class="fw-badge-dot"></span> 悬浮窗已打开 — 点击切换
+</div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+const App = (() => {
+  let tasks = [];
+  let activeBox = null;  // 当前活跃的时间盒
+  let dayBoxes = [];     // 当日已关闭的时间盒（用于时间线视图）
+  let settings = {
+    notifyEnabled: false,
+    soundEnabled: true,
+    filter: 'all',
+    dateFilter: localStorage.getItem('tm_date_filter') || 'all',
+  };
+  let connected = false;
+  let retryTimer = null;
+
+  async function api(method, path, body = null) {
+    try {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch('/api' + path, opts);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      connected = true;
+      updateConn();
+      return await res.json();  // null 或对象（成功）；undefined（错误，见 catch）
+    } catch(e) {
+      connected = false;
+      updateConn();
+      console.warn('API error:', method, path, e);
+      scheduleRetry();
+      return undefined;  // 用 undefined 表示错误，null 表示服务器合法返回的空
+    }
+  }
+
+  function scheduleRetry() {
+    if (retryTimer) return;
+    retryTimer = setTimeout(() => { retryTimer = null; if (!connected) loadAll(); }, 3000);
+  }
+
+  function updateConn() {
+    const badge = document.getElementById('connBadge');
+    if (connected) {
+      badge.textContent = '已连接';
+      badge.classList.remove('off');
+    } else {
+      badge.textContent = '离线';
+      badge.classList.add('off');
+    }
+  }
+
+  async function loadAll() {
+    const [t, b, s] = await Promise.all([
+      api('GET', '/tasks'),
+      api('GET', '/boxes/active'),
+      api('GET', '/settings'),
+    ]);
+    if (t) tasks = t;
+    if (b !== undefined) activeBox = b;  // null=无活跃盒（清空），对象=有活跃盒
+    if (s) Object.assign(settings, s);
+    await loadDayBoxes();
+    render();
+  }
+
+  async function loadDayBoxes() {
+    const today = new Date();
+    const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const r = await api('GET', '/boxes?date=' + dateStr);
+    if (r) dayBoxes = r.filter(b => b.status === 'closed');
+  }
+
+  function fmtTime(secs) {
+    if (secs < 0) secs = 0;
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function fmtDuration(secs) {
+    if (secs < 60) return Math.floor(secs) + 's';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    if (h > 0) return h + 'h' + m + 'm';
+    return m + 'm';
+  }
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function jsEsc(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+  }
+
+  function fmtDate(epoch) {
+    if (!epoch) return '';
+    const d = new Date(epoch * 1000);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function taskDateKey(t) {
+    return fmtDate(t.created);
+  }
+
+  async function openBox(taskId, budgetSecs) {
+    const r = await api('POST', '/boxes', { task_id: taskId, budget_secs: budgetSecs });
+    if (r) {
+      activeBox = r;
+      render();
+    }
+  }
+
+  async function closeBox() {
+    if (!activeBox) return;
+    const r = await api('PUT', '/boxes/' + activeBox.id + '/close');
+    if (r !== undefined) {
+      activeBox = null;
+      await loadDayBoxes();
+      render();
+    }
+  }
+
+  async function extendBox(addSecs) {
+    if (!activeBox) return;
+    const r = await api('PUT', '/boxes/' + activeBox.id + '/extend', { add_secs: addSecs });
+    if (r) {
+      activeBox = r;
+      reminderFiredStages = new Set();  // 延长后重置超时提醒阶段
+      dismissReminder();
+      render();
+      toast('已延长 ' + fmtDuration(addSecs));
+    }
+  }
+
+  async function pauseBox() {
+    if (!activeBox) return;
+    const r = await api('PUT', '/boxes/' + activeBox.id + '/pause');
+    if (r) { activeBox = r; render(); }
+  }
+
+  async function resumeBox() {
+    if (!activeBox) return;
+    const r = await api('PUT', '/boxes/' + activeBox.id + '/resume');
+    if (r) { activeBox = r; render(); }
+  }
+
+  async function toggleDone(id) {
+    const r = await api('POST', '/tasks/' + id + '/toggle');
+    if (r) {
+      const idx = tasks.findIndex(t => t.id === id);
+      if (idx >= 0) tasks[idx] = r;
+      // 任务被标记为完成，且仍有活跃盒：询问是否停止计时
+      if (r.done && r.hasActiveBox) {
+        const t = tasks[idx];
+        const cf = document.getElementById('switchConfirm');
+        cf.innerHTML = `任务「${esc(t.name)}」已完成，是否停止当前时间盒？
+          <button class="btn btn-ghost btn-sm" onclick="App.switchConfirmCancel()">继续计时</button>
+          <button class="btn btn-primary btn-sm" onclick="App.confirmStopBox()">停止计时</button>`;
+        cf.classList.remove('off');
+      }
+      render();
+    }
+  }
+
+  async function deleteTask(id) {
+    if (activeBox && activeBox.taskId === id) await closeBox();
+    const r = await api('DELETE', '/tasks/' + id);
+    if (r) {
+      tasks = tasks.filter(t => t.id !== id);
+      render();
+    }
+  }
+
+  async function addTask(name, desc, priority, plannedSecs) {
+    const t = await api('POST', '/tasks', { name, desc, priority, plannedSecs });
+    if (t) {
+      tasks.unshift(t);
+      if (!activeBox) {
+        const budget = plannedSecs || settings.defaultBudgetSecs || 1500;
+        await openBox(t.id, budget);
+      }
+      toast('已添加: ' + name);
+    }
+  }
+
+  async function setCurrent(id) {
+    const t = tasks.find(x => x.id === id);
+    if (!t) return;
+    if (activeBox && activeBox.taskId !== id) {
+      await closeBox();
+    }
+    if (!activeBox || activeBox.taskId !== id) {
+      await openBox(id, t.plannedSecs || settings.defaultBudgetSecs || 1500);
+    }
+  }
+
+  async function switchTask(id, name) {
+    if (activeBox && activeBox.taskId === id) return;
+    // 无活跃盒：直接切换，无需确认
+    if (!activeBox) {
+      await setCurrent(id);
+      return;
+    }
+    // 有活跃盒：显示带实际时长的确认
+    const worked = activeBox.workedSecs;
+    const curTask = tasks.find(t => t.id === activeBox.taskId);
+    const curName = curTask ? curTask.name : '当前任务';
+    const cf = document.getElementById('switchConfirm');
+    cf.innerHTML = `停止「${esc(curName)}」（已用 ${fmtDuration(worked)}）并为「${esc(name)}」开启新盒？
+      <button class="btn btn-ghost btn-sm" onclick="App.switchConfirmCancel()">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="App.switchConfirmYes('${id}')">切换</button>`;
+    cf.classList.remove('off');
+  }
+
+  function switchConfirmCancel() {
+    document.getElementById('switchConfirm').classList.add('off');
+  }
+
+  async function switchConfirmYes(id) {
+    switchConfirmCancel();
+    await setCurrent(id);
+  }
+
+  function confirmStopBox() {
+    switchConfirmCancel();
+    closeBox();
+  }
+
+  // ── 快速开始计时（P1-2 + P1-4）：弹出预算预设 ──
+  function quickStart(taskId) {
+    const t = tasks.find(x => x.id === taskId);
+    if (!t) return;
+    const cf = document.getElementById('switchConfirm');
+    const presets = [
+      { secs: 1500, label: '25 分' },
+      { secs: 2700, label: '45 分' },
+      { secs: 3600, label: '60 分' },
+    ];
+    const planned = t.plannedSecs;
+    const presetBtns = presets.map(p =>
+      `<button class="btn btn-ghost btn-sm" onclick="App.quickStartGo('${taskId}', ${p.secs})">${p.label}</button>`
+    ).join('');
+    const customBtn = `<button class="btn btn-ghost btn-sm" onclick="App.quickStartCustom('${taskId}')">自定义</button>`;
+    const plannedBtn = planned > 0
+      ? `<button class="btn btn-primary btn-sm" onclick="App.quickStartGo('${taskId}', ${planned})">用计划 ${fmtDuration(planned)}</button>`
+      : '';
+    cf.innerHTML = `为「${esc(t.name)}」开启时间盒，选择预算：
+      <button class="btn btn-ghost btn-sm" onclick="App.switchConfirmCancel()">取消</button>
+      ${presetBtns}${customBtn}${plannedBtn}`;
+    cf.classList.remove('off');
+  }
+
+  async function quickStartGo(taskId, secs) {
+    switchConfirmCancel();
+    // 若有活跃盒先关闭
+    if (activeBox && activeBox.taskId !== taskId) {
+      await closeBox();
+    }
+    await openBox(taskId, secs);
+  }
+
+  function quickStartCustom(taskId) {
+    const input = prompt('输入预算时间（分钟）：', '30');
+    if (input === null) return;
+    const mins = parseFloat(input);
+    if (isNaN(mins) || mins <= 0) { toast('请输入正数'); return; }
+    quickStartGo(taskId, Math.round(mins * 60));
+  }
+
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+  }
+
+  function renderSidebar() {
+    const sb = document.getElementById('sidebar');
+    let topHtml;
+    if (!activeBox) {
+      topHtml = `
+        <div class="cur-box">
+          <div class="cur-label">无活跃时间盒</div>
+          <div class="cur-name empty">选择或新建任务开始</div>
+        </div>
+        <div class="stats">
+          <div class="stat stat-total"><div class="stat-label">总任务</div><div class="stat-num">${tasks.length}</div></div>
+          <div class="stat stat-done"><div class="stat-label">已完成</div><div class="stat-num">${tasks.filter(t => t.done).length}</div></div>
+        </div>`;
+    } else {
+      const task = tasks.find(t => t.id === activeBox.taskId);
+      const name = task ? task.name : '(已删除)';
+      const rem = activeBox.remainingSecs;
+      const ot = activeBox.liveOvertimeSecs;
+      const isOvertime = rem < 0;
+      const isPaused = activeBox.status === 'paused';
+      const pct = Math.min(100, activeBox.progressPct);
+      const label = isOvertime ? '超出预算' : (isPaused ? '已暂停' : '时间盒进行中');
+
+      const timerFaceClass = 'timer-face' + (isOvertime ? ' overtime' : (rem <= 60 && !isOvertime ? ' urgent' : '')) + (isPaused ? ' paused' : '');
+      const progFillClass = 'prog-fill' + (isOvertime ? ' overtime' : (rem <= 60 && !isOvertime ? ' urgent' : ''));
+
+      let btnsHtml;
+      if (isPaused) {
+        btnsHtml = `<button class="btn btn-primary btn-sm" onclick="App.resumeBox()">继续</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(300)">+5分</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.closeBox()">${isOvertime ? '结束' : '关闭'}</button>`;
+      } else if (isOvertime) {
+        btnsHtml = `<button class="btn btn-ghost btn-sm" onclick="App.pauseBox()">暂停</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(300)">+5分</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(900)">+15分</button>
+          <button class="btn btn-primary btn-sm" onclick="App.closeBox()">结束</button>`;
+      } else {
+        btnsHtml = `<button class="btn btn-ghost btn-sm" onclick="App.pauseBox()">暂停</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(300)">+5分</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(900)">+15分</button>
+          <button class="btn btn-primary btn-sm" onclick="App.closeBox()">关闭</button>`;
+      }
+
+      topHtml = `
+      <div class="timer-card${isOvertime ? ' overtime' : ''}">
+        <div class="timer-label">${label}</div>
+        <div class="${timerFaceClass}">${isOvertime ? '+' + fmtTime(ot) : fmtTime(Math.max(0, rem))}</div>
+        <div class="prog-bg"><div class="${progFillClass}" style="width:${pct}%"></div></div>
+        <div class="timer-btns">${btnsHtml}</div>
+      </div>
+      <div class="cur-box">
+        <div class="cur-label">当前时间盒</div>
+        <div class="cur-name">${esc(name)}</div>
+        <div class="cur-time-stats">
+          <span class="cur-time-stat total">⏱ 已用 ${fmtDuration(activeBox.workedSecs)}</span>
+          <span class="cur-time-stat focus">预算 ${fmtDuration(activeBox.budgetSecs)}</span>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat stat-total"><div class="stat-label">总任务</div><div class="stat-num">${tasks.length}</div></div>
+        <div class="stat stat-done"><div class="stat-label">已完成</div><div class="stat-num">${tasks.filter(t => t.done).length}</div></div>
+      </div>`;
+    }
+    sb.innerHTML = topHtml + '<div id="musicSection" class="music-section"></div>';
+  }
+
+  function renderMain() {
+    const m = document.getElementById('taskList');
+    let visible = settings.filter === 'pending' ? tasks.filter(t => !t.done) :
+                  settings.filter === 'done' ? tasks.filter(t => t.done) : tasks;
+    if (settings.dateFilter !== 'all') {
+      visible = visible.filter(t => taskDateKey(t) === settings.dateFilter);
+    }
+    const cards = visible.map(t => {
+      const isCur = activeBox && activeBox.taskId === t.id;
+      const totalTime = t.focusSecs + t.overtimeSecs;
+      const bodyClick = isCur ? '' : `onclick="App.switchTask('${t.id}','${jsEsc(t.name)}');"`;
+      const priColor = { high: 'pri-high', mid: 'pri-mid', low: 'pri-low' }[t.priority] || 'pri-mid';
+      const priLabel = { high: '高', mid: '中', low: '低' }[t.priority] || '中';
+      const dateStr = taskDateKey(t);
+      const html = `<div class="tcard${t.done ? ' done' : ''}${isCur ? ' active' : ''}">
+        <div class="tcheck${t.done ? ' checked' : ''}" onclick="App.toggleDone('${t.id}')"></div>
+        <div class="tbody" ${bodyClick}>
+          <div class="t-title">${esc(t.name)}</div>
+          ${t.desc ? `<div class="t-desc">${esc(t.desc)}</div>` : ''}
+          ${dateStr ? `<div class="t-date">📅 ${dateStr}</div>` : ''}
+          ${totalTime > 1 ? `<div class="t-times">
+            <span class="t-time total">⏱ ${fmtDuration(totalTime)}</span>
+            ${t.focusSecs > 1 ? `<span class="t-time focus">计划内 ${fmtDuration(t.focusSecs)}</span>` : ''}
+            ${t.overtimeSecs > 1 ? `<span class="t-time ot">⚠ 超出 ${fmtDuration(t.overtimeSecs)}</span>` : ''}
+          </div>` : ''}
+        </div>
+        <div class="tactions">
+          <span class="pri ${priColor}">${priLabel}</span>
+          ${isCur ? '' : `<button class="btn-icon play" title="开始计时" onclick="event.stopPropagation();App.quickStart('${t.id}')">▶</button>`}
+          <button class="btn-icon" onclick="event.stopPropagation();App.modalOpen('${t.id}')">✎</button>
+          <button class="btn-icon del" onclick="event.stopPropagation();App.confirmDelete('${t.id}','${jsEsc(t.name)}')">✕</button>
+        </div>
+      </div>`;
+      return html;
+    }).join('');
+
+    const filters = [
+      { key: 'all', label: '全部' },
+      { key: 'pending', label: '进行中' },
+      { key: 'done', label: '已完成' },
+    ];
+    const chips = filters.map(f => `<button class="chip${settings.filter === f.key ? ' on' : ''}" onclick="App.setFilter('${f.key}')">${f.label}</button>`).join('');
+
+    // 日期筛选：取所有任务的创建日期，去重并降序排列
+    const dateKeys = [...new Set(tasks.map(taskDateKey).filter(Boolean))].sort().reverse();
+    const dateOpts = ['<option value="all">全部日期</option>']
+      .concat(dateKeys.map(d => `<option value="${d}"${settings.dateFilter === d ? ' selected' : ''}>${d}</option>`))
+      .join('');
+
+    m.innerHTML = `
+      <div class="sec-hd"><h2>任务列表</h2><span class="badge">${tasks.filter(t => !t.done).length} 进行中</span></div>
+      <div class="filters">${chips}<select class="date-filter" onchange="App.setDateFilter(this.value)">${dateOpts}</select></div>
+      <div class="tasks">${cards || '<div class="empty">暂无任务</div>'}</div>`;
+  }
+
+  function render() {
+    renderSidebar();
+    renderTimeline();
+    renderMain();
+    renderMusic();
+    renderTopbarStatus();
+  }
+
+  // ── 今日时间线（P0-2 + P1-3 计划vs实际）──
+  function renderTimeline() {
+    const el = document.getElementById('timeline');
+    if (!el) return;
+    if (!dayBoxes.length) {
+      el.innerHTML = `<div class="sec-hd"><h2>今日时间线</h2></div><div class="empty">今天还没有已完成的时间盒</div>`;
+      return;
+    }
+    // 按开始时间升序
+    const boxes = [...dayBoxes].sort((a, b) => a.openedAt - b.openedAt);
+    // 找到今天的工作时间范围（最早开盒到最晚关盒）
+    const minTs = Math.min(...boxes.map(b => b.openedAt));
+    const maxTs = Math.max(...boxes.map(b => b.closedAt));
+    const span = Math.max(1, maxTs - minTs);
+
+    const bars = boxes.map(b => {
+      const left = (b.openedAt - minTs) / span * 100;
+      const width = Math.max(2, (b.closedAt - b.openedAt) / span * 100);
+      const t = tasks.find(x => x.id === b.taskId);
+      const name = t ? t.name : (b.taskName || '(已删除)');
+      const pri = (t && t.priority) || b.taskPriority || 'mid';
+      const priCls = { high: 'tl-high', mid: 'tl-mid', low: 'tl-low' }[pri] || 'tl-mid';
+      const planned = b.budgetSecs;
+      const actual = b.focusSecs + b.overtimeSecs;
+      const diff = actual - planned;
+      const diffCls = diff > 1 ? 'tl-over' : (diff < -1 ? 'tl-under' : 'tl-ok');
+      const diffStr = diff > 1 ? `+${fmtDuration(diff)}` : (diff < -1 ? `-${fmtDuration(-diff)}` : '吻合');
+      const startStr = new Date(b.openedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      const endStr = new Date(b.closedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      return `<div class="tl-row">
+        <div class="tl-time">${startStr}–${endStr}</div>
+        <div class="tl-bar-wrap">
+          <div class="tl-bar ${priCls}" style="left:${left}%;width:${width}%" title="${esc(name)} · ${fmtDuration(actual)}"></div>
+        </div>
+        <div class="tl-name">${esc(name)}</div>
+        <div class="tl-stats">
+          <span class="tl-actual">实际 ${fmtDuration(actual)}</span>
+          <span class="tl-diff ${diffCls}">${diffStr}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    const totalActual = boxes.reduce((s, b) => s + b.focusSecs + b.overtimeSecs, 0);
+    const totalPlanned = boxes.reduce((s, b) => s + b.budgetSecs, 0);
+
+    el.innerHTML = `
+      <div class="sec-hd">
+        <h2>今日时间线</h2>
+        <span class="badge">${boxes.length} 个时间盒 · 实际 ${fmtDuration(totalActual)} / 计划 ${fmtDuration(totalPlanned)}</span>
+      </div>
+      <div class="tl-list">${bars}</div>`;
+  }
+
+  // ── 顶部全局状态条（P1-1）──
+  function renderTopbarStatus() {
+    const el = document.getElementById('topbarStatus');
+    if (!el) return;
+    if (!activeBox) {
+      el.classList.add('off');
+      el.innerHTML = '';
+      return;
+    }
+    const task = tasks.find(t => t.id === activeBox.taskId);
+    const name = task ? task.name : '当前任务';
+    const rem = activeBox.remainingSecs;
+    const ot = activeBox.liveOvertimeSecs;
+    const isOvertime = rem < 0;
+    const isPaused = activeBox.status === 'paused';
+    const timeStr = isOvertime ? '+' + fmtTime(ot) : fmtTime(Math.max(0, rem));
+    const dotCls = isPaused ? 'ts-paused' : (isOvertime ? 'ts-over' : 'ts-running');
+    el.className = 'topbar-status ' + dotCls;
+    el.innerHTML = `<span class="ts-dot"></span><span class="ts-name">${esc(name)}</span><span class="ts-time">${timeStr}</span>`;
+  }
+
+  function scrollToSidebar() {
+    document.getElementById('sidebar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function updateTimerDisplay() {
+    if (!activeBox) return;
+    const rem = activeBox.remainingSecs;
+    const ot = activeBox.liveOvertimeSecs;
+    const isOvertime = rem < 0;
+    const isPaused = activeBox.status === 'paused';
+    const pct = Math.min(100, activeBox.progressPct);
+
+    const timerFace = document.querySelector('.timer-face');
+    if (timerFace) {
+      timerFace.textContent = isOvertime ? '+' + fmtTime(ot) : fmtTime(Math.max(0, rem));
+      timerFace.className = 'timer-face' + (isOvertime ? ' overtime' : (rem <= 60 && !isOvertime ? ' urgent' : '')) + (isPaused ? ' paused' : '');
+    }
+    const progFill = document.querySelector('.prog-fill');
+    if (progFill) {
+      progFill.style.width = pct + '%';
+      progFill.className = 'prog-fill' + (isOvertime ? ' overtime' : (rem <= 60 && !isOvertime ? ' urgent' : ''));
+    }
+    const timerLabel = document.querySelector('.timer-label');
+    if (timerLabel) {
+      timerLabel.textContent = isOvertime ? '超出预算' : (isPaused ? '已暂停' : '时间盒进行中');
+    }
+    const totalStat = document.querySelector('.cur-time-stat.total');
+    if (totalStat) {
+      totalStat.textContent = '⏱ 已用 ' + fmtDuration(activeBox.workedSecs);
+    }
+    const timerCard = document.querySelector('.timer-card');
+    if (timerCard) {
+      timerCard.classList.toggle('overtime', isOvertime);
+    }
+    updateOvertimeReminder(isOvertime, ot, activeBox);
+    // 同步顶部状态条的时间显示
+    const tsTime = document.querySelector('#topbarStatus .ts-time');
+    if (tsTime) tsTime.textContent = isOvertime ? '+' + fmtTime(ot) : fmtTime(Math.max(0, rem));
+    const tsEl = document.getElementById('topbarStatus');
+    if (tsEl) {
+      tsEl.className = 'topbar-status ' + (isPaused ? 'ts-paused' : (isOvertime ? 'ts-over' : 'ts-running'));
+    }
+  }
+
+  // ── 超时多通道提醒（声音 + 浏览器通知 + reminder 卡片）──
+  let reminderBeepEl = null;
+  let reminderFiredStages = new Set();  // 已触发的超时阶段（0/1/5 分钟），避免重复
+  let lastReminderBoxId = null;
+
+  function ensureBeepEl() {
+    if (!reminderBeepEl) {
+      reminderBeepEl = document.createElement('audio');
+      // 短促提示音：用 data URI 生成 0.3s 的 880Hz 正弦波
+      reminderBeepEl.src = 'data:audio/wav;base64,UklGRsQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaABAACA';
+    }
+    return reminderBeepEl;
+  }
+
+  function playBeep() {
+    if (!settings.soundEnabled) return;
+    try {
+      const el = ensureBeepEl();
+      el.currentTime = 0;
+      el.play().catch(() => {});  // 忽略自动播放策略错误
+    } catch (e) {}
+  }
+
+  async function ensureNotifyPermission() {
+    if (!settings.notifyEnabled) return false;
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission !== 'denied') {
+      const p = await Notification.requestPermission();
+      return p === 'granted';
+    }
+    return false;
+  }
+
+  function fireNotification(title, body) {
+    ensureNotifyPermission().then(ok => {
+      if (ok) {
+        try {
+          new Notification(title, { body, icon: '/static/music/liszt-liebestraum-no3.mp3'.replace('.mp3', '.png') });
+        } catch (e) {}
+      }
+    });
+  }
+
+  function updateOvertimeReminder(isOvertime, otSecs, box) {
+    const reminderEl = document.getElementById('reminder');
+    if (!reminderEl) return;
+
+    // 盒子切换时重置阶段
+    if (box && box.id !== lastReminderBoxId) {
+      lastReminderBoxId = box.id;
+      reminderFiredStages = new Set();
+      reminderEl.classList.add('off');
+    }
+
+    if (!isOvertime || !box) {
+      reminderEl.classList.add('off');
+      return;
+    }
+
+    const task = tasks.find(t => t.id === box.taskId);
+    const taskName = task ? task.name : '当前任务';
+    // 阶段：0分钟（刚超时）、1分钟、5分钟
+    const stage = otSecs >= 300 ? 5 : (otSecs >= 60 ? 1 : 0);
+    if (reminderFiredStages.has(stage)) return;  // 该阶段已触发
+    reminderFiredStages.add(stage);
+
+    playBeep();
+
+    const subText = stage === 0 ? '刚刚超出预算时间' :
+                    stage === 1 ? '已超出 1 分钟' : '已超出 5 分钟，建议结束或延长';
+    fireNotification('时间盒超时: ' + taskName, subText);
+
+    // 填充 reminder 卡片
+    reminderEl.innerHTML = `
+      <div class="rem-head">
+        <div class="rem-bell">!</div>
+        <div class="rem-info">
+          <div class="rem-title">时间盒已超时</div>
+          <div class="rem-sub">${esc(subText)}</div>
+        </div>
+        <button class="rem-close" onclick="App.dismissReminder()">×</button>
+      </div>
+      <div class="rem-body">
+        <div class="rem-task">${esc(taskName)}</div>
+        <div class="rem-desc">已超出 ${fmtTime(otSecs)}，可选择延长或结束时间盒</div>
+        <div class="rem-btns">
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(300);App.dismissReminder()">+5 分钟</button>
+          <button class="btn btn-ghost btn-sm" onclick="App.extendBox(900);App.dismissReminder()">+15 分钟</button>
+          <button class="btn btn-primary btn-sm" onclick="App.closeBox();App.dismissReminder()">结束</button>
+        </div>
+      </div>`;
+    reminderEl.classList.remove('off');
+  }
+
+  function dismissReminder() {
+    const el = document.getElementById('reminder');
+    if (el) el.classList.add('off');
+  }
+
+  let tickInterval = null;
+  function startTick() {
+    if (tickInterval) return;
+    tickInterval = setInterval(async () => {
+      const b = await api('GET', '/boxes/active');
+      if (b === undefined) return;  // 网络错误，不改状态
+      if (b) {
+        const boxChanged = !activeBox || activeBox.id !== b.id;
+        activeBox = b;
+        if (boxChanged) render();       // 盒子变了（新开/切换），完整渲染
+        else updateTimerDisplay();      // 同一盒，仅更新计时数字
+      } else {
+        if (activeBox) { activeBox = null; render(); }  // 盒子被关闭
+      }
+    }, 1000);
+  }
+
+  // ── Music ──
+  const PLAYLIST = [
+    { name: '升华之夜（弦乐版）Op.4', artist: '勋伯格', url: '/music/verklarte-nacht.mp3' },
+    { name: '爱之梦 No.3 (Liebesträume S.541)', artist: '李斯特', url: '/music/liszt-liebestraum-no3.mp3' },
+    { name: '匈牙利狂想曲 No.2 (Hungarian Rhapsody S.244)', artist: '李斯特', url: '/music/liszt-hungarian-rhapsody-no2.mp3' },
+    { name: '钟 (La Campanella, 帕格尼尼练习曲 S.141)', artist: '李斯特', url: '/music/liszt-la-campanella.mp3' },
+    { name: '叹息 (Un Sospiro, 三首音乐会练习曲 S.144)', artist: '李斯特', url: '/music/liszt-un-sospiro.mp3' },
+    { name: '第5交响曲 I.葬礼进行曲 (Symphony No.5)', artist: '马勒', url: '/music/mahler-sym5-mvt1.mp3' },
+    { name: '第5交响曲 II.暴风雨般激动 (Symphony No.5)', artist: '马勒', url: '/music/mahler-sym5-mvt2.mp3' },
+    { name: '第5交响曲 III.谐谑曲 (Symphony No.5)', artist: '马勒', url: '/music/mahler-sym5-mvt3.mp3' },
+    { name: '第5交响曲 IV.小柔板 (Symphony No.5)', artist: '马勒', url: '/music/mahler-sym5-mvt4.mp3' },
+    { name: '第5交响曲 V.回旋曲-终曲 (Symphony No.5)', artist: '马勒', url: '/music/mahler-sym5-mvt5.mp3' },
+    { name: '第2钢琴协奏曲 I.中板 (PC No.2 Op.18)', artist: '拉赫玛尼诺夫', url: '/music/rachmaninoff-pc2-mvt1.mp3' },
+    { name: '第2钢琴协奏曲 II.绵延的柔板 (PC No.2 Op.18)', artist: '拉赫玛尼诺夫', url: '/music/rachmaninoff-pc2-mvt2.mp3' },
+    { name: '第2钢琴协奏曲 III.谐谑的快板 (PC No.2 Op.18)', artist: '拉赫玛尼诺夫', url: '/music/rachmaninoff-pc2-mvt3.mp3' },
+    { name: '第3钢琴协奏曲 I.不过分的快板 (PC No.3 Op.30)', artist: '拉赫玛尼诺夫', url: '/music/rachmaninoff-pc3-mvt1.mp3' },
+    { name: '第3钢琴协奏曲 II.间奏曲-柔板 (PC No.3 Op.30)', artist: '拉赫玛尼诺夫', url: '/music/rachmaninoff-pc3-mvt2.mp3' },
+    { name: '第3钢琴协奏曲 III.终曲-诙谐的快板 (PC No.3 Op.30)', artist: '拉赫玛尼诺夫', url: '/music/rachmaninoff-pc3-mvt3.mp3' },
+    { name: '第9交响曲"自新世界" I.柔板-如火般热烈 (Symphony No.9)', artist: '德沃夏克', url: '/music/dvorak-sym9-mvt1.mp3' },
+    { name: '第9交响曲"自新世界" II.广板 (Symphony No.9)', artist: '德沃夏克', url: '/music/dvorak-sym9-mvt2.mp3' },
+    { name: '第9交响曲"自新世界" III.谐谑曲 (Symphony No.9)', artist: '德沃夏克', url: '/music/dvorak-sym9-mvt3.mp3' },
+    { name: '第9交响曲"自新世界" IV.火热的快板 (Symphony No.9)', artist: '德沃夏克', url: '/music/dvorak-sym9-mvt4.mp3' },
+    { name: '第6交响曲"悲怆" I.柔板-不过分的快板 (Symphony No.6 Op.74)', artist: '柴可夫斯基', url: '/music/tchaikovsky-sym6-mvt1.mp3' },
+    { name: '第6交响曲"悲怆" II.优雅的快板 (Symphony No.6 Op.74)', artist: '柴可夫斯基', url: '/music/tchaikovsky-sym6-mvt2.mp3' },
+    { name: '第6交响曲"悲怆" III.活泼的极快板 (Symphony No.6 Op.74)', artist: '柴可夫斯基', url: '/music/tchaikovsky-sym6-mvt3.mp3' },
+    { name: '第6交响曲"悲怆" IV.终曲-悲叹的柔板 (Symphony No.6 Op.74)', artist: '柴可夫斯基', url: '/music/tchaikovsky-sym6-mvt4.mp3' },
+    { name: '小提琴协奏曲 I.中庸的快板 (VC Op.35)', artist: '柴可夫斯基', url: '/music/tchaikovsky-violin-concerto-mvt1.mp3' },
+    { name: '小提琴协奏曲 II.短歌-行板 (VC Op.35)', artist: '柴可夫斯基', url: '/music/tchaikovsky-violin-concerto-mvt2.mp3' },
+    { name: '小提琴协奏曲 III.活泼的极快板 (VC Op.35)', artist: '柴可夫斯基', url: '/music/tchaikovsky-violin-concerto-mvt3.mp3' },
+    { name: '查拉图斯特拉如是说 上半部 (Op.30)', artist: '理查·施特劳斯', url: '/music/strauss-zarathustra-part1.mp3' },
+    { name: '查拉图斯特拉如是说 下半部 (Op.30)', artist: '理查·施特劳斯', url: '/music/strauss-zarathustra-part2.mp3' },
+    { name: '钢琴协奏曲 Op.16 (完整)', artist: '格里格', url: '/music/grieg-piano-concerto.mp3' },
+    { name: '第2钢琴协奏曲 I.不过分的快板 (PC No.2 Op.83)', artist: '勃拉姆斯', url: '/music/brahms-pc2-mvt1.mp3' },
+    { name: '第2钢琴协奏曲 II.热情的快板 (PC No.2 Op.83)', artist: '勃拉姆斯', url: '/music/brahms-pc2-mvt2.mp3' },
+    { name: '第2钢琴协奏曲 III.行板 (PC No.2 Op.83)', artist: '勃拉姆斯', url: '/music/brahms-pc2-mvt3.mp3' },
+    { name: '第2钢琴协奏曲 IV.优雅的小快板 (PC No.2 Op.83)', artist: '勃拉姆斯', url: '/music/brahms-pc2-mvt4.mp3' },
+  ];
+  let musicEl = null;
+  let musicIdx = -1;
+  let musicOpen = false;
+  let musicVol = 0.5;
+  let loopMode = 'list';  // 'list' 或 'single'
+
+  function initMusic() {
+    musicEl = document.createElement('audio');
+    musicEl.loop = false;
+    musicEl.volume = musicVol;
+    musicEl.preload = 'metadata';
+    musicEl.addEventListener('ended', () => {
+      if (loopMode === 'single') {
+        musicPlay(musicIdx);
+      } else if (musicIdx < PLAYLIST.length - 1) {
+        musicPlay(musicIdx + 1);
+      } else {
+        musicIdx = -1;
+        renderMusic();
+      }
+    });
+    musicEl.addEventListener('timeupdate', () => renderMusicProgress());
+    const saved = localStorage.getItem('tm_music_vol');
+    if (saved) { musicVol = parseFloat(saved); musicEl.volume = musicVol; }
+    const savedLoop = localStorage.getItem('tm_music_loop');
+    if (savedLoop) { loopMode = savedLoop; }
+  }
+
+  function musicPlay(idx) {
+    if (!musicEl) initMusic();
+    if (idx === musicIdx && !musicEl.paused) {
+      musicEl.pause();
+      renderMusic();
+      return;
+    }
+    if (idx >= 0 && idx < PLAYLIST.length) {
+      musicIdx = idx;
+      musicEl.src = PLAYLIST[idx].url;
+      musicEl.load();
+      const p = musicEl.play();
+      if (p) p.catch(e => console.warn('play error:', e.message));
+    }
+    renderMusic();
+  }
+
+  function musicToggle() {
+    if (!musicEl) { initMusic(); musicPlay(0); return; }
+    if (musicEl.paused) {
+      if (musicIdx < 0) musicPlay(0);
+      else {
+        const p = musicEl.play();
+        if (p) p.catch(e => console.warn('play error:', e.message));
+      }
+    } else {
+      musicEl.pause();
+    }
+    renderMusic();
+  }
+
+  function musicSetVol(v) {
+    musicVol = v;
+    if (musicEl) musicEl.volume = v;
+    localStorage.setItem('tm_music_vol', v);
+  }
+
+  function musicSeek(e) {
+    if (!musicEl || !musicEl.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    musicEl.currentTime = pct * musicEl.duration;
+    renderMusicProgress();
+  }
+
+  function toggleLoopMode() {
+    loopMode = loopMode === 'list' ? 'single' : 'list';
+    localStorage.setItem('tm_music_loop', loopMode);
+    renderMusic();
+  }
+
+  function fmtMusicTime(s) {
+    if (!s || !isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return m + ':' + String(sec).padStart(2, '0');
+  }
+
+  function renderMusicProgress() {
+    const fill = document.querySelector('.music-progress-fill');
+    const curEl = document.querySelector('.music-time-cur');
+    const durEl = document.querySelector('.music-time-dur');
+    if (fill && musicEl && musicEl.duration) {
+      fill.style.width = (musicEl.currentTime / musicEl.duration * 100) + '%';
+    }
+    if (curEl) curEl.textContent = fmtMusicTime(musicEl ? musicEl.currentTime : 0);
+    if (durEl) durEl.textContent = fmtMusicTime(musicEl ? musicEl.duration : 0);
+  }
+
+  function renderMusic() {
+    const el = document.getElementById('musicSection');
+    if (!el) return;
+    const playing = musicEl && !musicEl.paused;
+    const cur = musicIdx >= 0 ? PLAYLIST[musicIdx] : null;
+    const statusText = cur ? (playing ? '▶ ' : '⏸ ') + cur.name + ' — ' + cur.artist : '背景音乐';
+
+    const trackList = PLAYLIST.map((t, i) => `
+      <div class="music-track${i === musicIdx ? ' active' : ''}" onclick="App.musicPlay(${i})">
+        <span class="track-num">${i === musicIdx && playing ? '▶' : (i + 1)}</span>
+        <span class="track-name">${esc(t.name)}</span>
+        <span class="track-artist">${esc(t.artist)}</span>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <div class="music-header" onclick="App.musicToggleSection()">
+        <span>♪</span>
+        <span class="now-playing">${statusText}</span>
+        <span class="arrow${musicOpen ? ' open' : ''}">▶</span>
+      </div>
+      <div class="music-body${musicOpen ? ' open' : ''}">
+        <div class="music-track-list">${trackList}</div>
+        <div class="music-controls">
+          <button class="music-btn" onclick="App.musicPrev()">⏮</button>
+          <button class="music-btn play" onclick="App.musicToggle()">${playing ? '⏸' : '▶'}</button>
+          <button class="music-btn" onclick="App.musicNext()">⏭</button>
+        </div>
+        <div class="music-progress" onclick="App.musicSeek(event)">
+          <div class="music-progress-fill" style="width:0%"></div>
+        </div>
+        <div class="music-time">
+          <span class="music-time-cur">0:00</span>
+          <span class="music-time-dur">0:00</span>
+        </div>
+        <div class="music-volume">
+          <span>🔊</span>
+          <input type="range" min="0" max="1" step="0.05" value="${musicVol}" oninput="App.musicSetVol(parseFloat(this.value))">
+        </div>
+        <div class="music-loop">
+          <button class="music-loop-btn${loopMode === 'list' ? ' active' : ''}" onclick="App.toggleLoopMode()" title="循环模式">
+            ${loopMode === 'list' ? '列表循环' : '单曲循环'}
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function musicToggleSection() {
+    musicOpen = !musicOpen;
+    renderMusic();
+  }
+
+  function musicPrev() { if (musicIdx > 0) musicPlay(musicIdx - 1); }
+  function musicNext() { if (musicIdx < PLAYLIST.length - 1) musicPlay(musicIdx + 1); }
+
+  // ── Modals ──
+  let modalMode = 'add', modalEditId = null;
+  function modalOpen(id) {
+    modalMode = id ? 'edit' : 'add';
+    modalEditId = id;
+    const t = id ? tasks.find(x => x.id === id) : null;
+    const plannedMins = t && t.plannedSecs ? Math.round(t.plannedSecs / 60) : '';
+    const ov = document.getElementById('overlay');
+    ov.innerHTML = `<div class="modal">
+      <h3>${id ? '编辑任务' : '新建任务'}</h3>
+      <div class="field"><label>任务名称</label><input type="text" id="mName" value="${t ? esc(t.name) : ''}" placeholder="例如：完成需求文档" maxlength="80"></div>
+      <div class="field"><label>描述</label><textarea id="mDesc" placeholder="备注">${t ? esc(t.desc || '') : ''}</textarea></div>
+      <div class="field"><label>优先级</label>
+        <select id="mPri">
+          <option value="mid" ${t && t.priority === 'mid' ? 'selected' : ''}>中</option>
+          <option value="high" ${t && t.priority === 'high' ? 'selected' : ''}>高</option>
+          <option value="low" ${t && t.priority === 'low' ? 'selected' : ''}>低</option>
+        </select>
+      </div>
+      <div class="field"><label>计划时间（分钟）</label><input type="number" id="mPlanned" value="${plannedMins}" placeholder="例如：25" min="0" step="5"></div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="App.modalClose()">取消</button>
+        <button class="btn btn-primary" onclick="App.modalSave()">保存</button>
+      </div>
+    </div>`;
+    ov.classList.remove('off');
+    setTimeout(() => document.getElementById('mName')?.focus(), 100);
+  }
+
+  function modalClose() {
+    document.getElementById('overlay').classList.add('off');
+    modalEditId = null;
+  }
+
+  async function modalSave() {
+    const name = document.getElementById('mName').value.trim();
+    if (!name) { document.getElementById('mName').focus(); return; }
+    const desc = document.getElementById('mDesc').value.trim();
+    const pri = document.getElementById('mPri').value;
+    const plannedMin = document.getElementById('mPlanned').value;
+    const plannedSecs = plannedMin ? parseFloat(plannedMin) * 60 : 0;
+
+    if (modalMode === 'add') {
+      await addTask(name, desc, pri, plannedSecs);
+    } else {
+      const r = await api('PUT', '/tasks/' + modalEditId, { name, desc, priority: pri, plannedSecs });
+      if (r) {
+        const idx = tasks.findIndex(t => t.id === modalEditId);
+        if (idx >= 0) tasks[idx] = r;
+      }
+    }
+    modalClose();
+    render();
+  }
+
+  function confirmDelete(id, name) {
+    const ov = document.getElementById('overlay');
+    ov.innerHTML = `<div class="modal">
+      <h3>删除任务？</h3>
+      <p style="color:var(--c-gray-600);margin-bottom:20px">确定删除「${esc(name)}」？此操作不可撤销</p>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="App.modalClose()">取消</button>
+        <button class="btn btn-danger" onclick="App.deleteTask('${id}');App.modalClose()">删除</button>
+      </div>
+    </div>`;
+    ov.classList.remove('off');
+  }
+
+  // ── Float window sync ──
+  let floatWin = null;
+  const bc = new BroadcastChannel('task-manager-sync');
+  bc.onmessage = (e) => {
+    if (e.data.type === 'float-opened') {
+      document.getElementById('fwBadge').classList.remove('off');
+    }
+    if (e.data.type === 'float-closed') {
+      document.getElementById('fwBadge').classList.add('off');
+      floatWin = null;
+    }
+  };
+
+  // ── Public API ──
+  return {
+    retryConnect: loadAll,
+    startTick,  // 公开 tick 函数
+    floatShow: () => { floatWin = window.open('/float.html', 'taskTimerFloat', 'width=230,height=260'); },
+    floatFocus: () => { if (floatWin && !floatWin.closed) floatWin.focus(); },
+    scrollToSidebar,
+    openBox, closeBox, extendBox, toggleDone, deleteTask, setCurrent, switchTask, switchConfirmCancel, switchConfirmYes, confirmStopBox,
+    quickStart, quickStartGo, quickStartCustom,
+    modalOpen, modalClose, modalSave, confirmDelete,
+    setFilter: (f) => { settings.filter = f; api('PUT', '/settings', { filter: f }); render(); },
+    setDateFilter: (d) => { settings.dateFilter = d; localStorage.setItem('tm_date_filter', d); render(); },
+    pauseBox, resumeBox, dismissReminder,
+    musicPlay, musicToggle, musicPrev, musicNext, musicSetVol, musicToggleSection, musicSeek, toggleLoopMode,
+  };
+})();
+
+document.addEventListener('DOMContentLoaded', () => {
+  App.retryConnect();
+  App.startTick();  // 启动计时器秒级更新
+  setInterval(() => App.retryConnect(), 10000);
+});
+</script>
+</body>
+</html>

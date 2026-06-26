@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>计时器</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #fff; color: #2C2C2A; font-size: 14px;
+    user-select: none; overflow: hidden;
+  }
+  .fw {
+    width: 200px; border: 0.5px solid rgba(0,0,0,.12);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 6px 24px rgba(0,0,0,.12);
+    transition: border-color .3s;
+  }
+  .fw.overtime { border-color: #D4990E; }
+  .fw-head {
+    background: #0C447C; color: #fff; padding: 8px 12px;
+    display: flex; align-items: center; justify-content: space-between; font-size: 11px;
+  }
+  .fw-head.overtime { background: #6B3E08; }
+  .fw-head-label { font-weight: 500; letter-spacing: .04em; }
+  .fw-x { background: transparent; border: none; color: rgba(255,255,255,.5); font-size: 14px; cursor: pointer; line-height: 1; padding: 0; }
+  .fw-x:hover { color: #fff; }
+  .fw-body { padding: 14px 12px 12px; text-align: center; }
+  .fw-time {
+    font-size: 36px; font-weight: 500; font-variant-numeric: tabular-nums;
+    color: #185FA5; line-height: 1; margin-bottom: 8px;
+  }
+  .fw-time.urgent { color: #A32D2D; }
+  .fw-time.overtime { color: #854F0B; }
+  .fw-time.paused { opacity: .45; }
+  .fw-task {
+    font-size: 11px; color: #888780; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;
+  }
+  .fw-ot-tag { font-size: 10px; color: #854F0B; font-weight: 600; margin-bottom: 4px; }
+  .fw-prog { height: 3px; background: #E6F1FB; border-radius: 2px; overflow: hidden; }
+  .fw-fill { height: 100%; background: #378ADD; border-radius: 2px; transition: width 1s linear; }
+  .fw-fill.urgent { background: #E24B4A; }
+  .fw-fill.overtime { background: #D4990E; }
+  .fw-btns { display: flex; gap: 4px; margin-top: 8px; min-height: 24px; }
+  .fw-btns button {
+    flex: 1; border: 0.5px solid rgba(0,0,0,.15); border-radius: 6px;
+    padding: 4px 0; font-size: 10px; font-family: inherit; cursor: pointer;
+    background: #fff; color: #444441; transition: background .15s;
+  }
+  .fw-btns button:hover { background: #F1EFE8; }
+  .fw-btns button.primary { background: #185FA5; color: #fff; border-color: transparent; }
+  .fw-btns button.primary:hover { background: #0C447C; }
+  .fw-btns button.danger { background: #A32D2D; color: #fff; border-color: transparent; }
+  .fw-btns button.danger:hover { background: #791F1F; }
+  .fw-status {
+    font-size: 9px; color: #B4B2A9; margin-top: 6px; text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="fw" id="widget">
+  <div class="fw-head" id="fwHead">
+    <span class="fw-head-label" id="fwLabel">连接中</span>
+    <button class="fw-x" onclick="self.close()">&times;</button>
+  </div>
+  <div class="fw-body">
+    <div class="fw-time" id="fwTime">--:--</div>
+    <div class="fw-task" id="fwTask">等待数据...</div>
+    <div class="fw-ot-tag" id="fwOtTag" style="display:none"></div>
+    <div class="fw-prog"><div class="fw-fill" id="fwFill" style="width:0%"></div></div>
+    <div class="fw-btns" id="fwBtns"></div>
+    <div class="fw-status" id="fwStatus">等待连接...</div>
+  </div>
+</div>
+<script>
+const ch = new BroadcastChannel('task-manager-sync');
+
+// ── State from backend (TimeBox model) ──
+let box = null;       // 当前活跃时间盒（或 null）
+let connected = false;
+let lastMode = null;
+
+// 通知主页浮窗已打开
+ch.postMessage({ type: 'float-opened' });
+
+ch.onmessage = (e) => {
+  if (e.data.type === 'close-float') self.close();
+};
+
+// ── API helpers ──
+async function fetchActive() {
+  try {
+    const res = await fetch('/api/boxes/active');
+    if (!res.ok) { connected = false; return null; }
+    connected = true;
+    return await res.json();  // null 或 box 对象
+  } catch(e) {
+    connected = false;
+    return null;
+  }
+}
+
+async function sendCmd(path) {
+  try {
+    await fetch('/api/boxes/' + path, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
+  } catch(e) { /* 忽略，下次 tick 会同步 */ }
+  const b = await fetchActive();
+  box = b;
+  updateUI();
+}
+
+// ── Display helpers ──
+function fmtTime(secs) {
+  if (secs < 0) secs = 0;
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function getMode() {
+  if (!connected) return 'disconnected';
+  if (!box) return 'no-box';
+  if (box.status === 'paused') return 'paused';
+  if (box.remainingSecs < 0) return 'overtime';
+  return 'running';
+}
+
+// ── Build buttons only when mode changes ──
+function buildButtons(mode) {
+  const btns = document.getElementById('fwBtns');
+  if (mode === 'overtime' || mode === 'running') {
+    btns.innerHTML = `
+      <button data-action="pause">暂停</button>
+      <button data-action="extend">+5分</button>
+      <button class="primary" data-action="close">${mode === 'overtime' ? '结束' : '关闭'}</button>`;
+  } else if (mode === 'paused') {
+    btns.innerHTML = `
+      <button data-action="resume">继续</button>
+      <button class="primary" data-action="close">关闭</button>`;
+  } else {
+    btns.innerHTML = '';
+  }
+
+  btns.onclick = (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (!box) return;
+    const bid = box.id;
+    switch (action) {
+      case 'pause': sendCmd(bid + '/pause'); break;
+      case 'resume': sendCmd(bid + '/resume'); break;
+      case 'extend': sendCmd(bid + '/extend'); break;
+      case 'close': sendCmd(bid + '/close'); break;
+    }
+  };
+}
+
+// ── Lightweight UI update ──
+function updateUI() {
+  const widget = document.getElementById('widget');
+  const head = document.getElementById('fwHead');
+  const label = document.getElementById('fwLabel');
+  const time = document.getElementById('fwTime');
+  const task = document.getElementById('fwTask');
+  const otTag = document.getElementById('fwOtTag');
+  const fill = document.getElementById('fwFill');
+  const status = document.getElementById('fwStatus');
+
+  if (!connected) {
+    label.textContent = '连接中';
+    time.textContent = '--:--';
+    task.textContent = '等待数据...';
+    status.textContent = '等待连接...';
+    fill.style.width = '0%';
+    document.getElementById('fwBtns').innerHTML = '';
+    lastMode = null;
+    return;
+  }
+
+  const mode = getMode();
+  if (mode !== lastMode) {
+    buildButtons(mode);
+    lastMode = mode;
+  }
+
+  if (!box) {
+    widget.classList.remove('overtime');
+    head.classList.remove('overtime');
+    label.textContent = '就绪';
+    time.textContent = '--:--';
+    time.className = 'fw-time';
+    task.textContent = '无活跃时间盒';
+    otTag.style.display = 'none';
+    fill.style.width = '0%';
+    fill.className = 'fw-fill';
+    status.textContent = '在主页选择任务开始';
+    return;
+  }
+
+  const rem = box.remainingSecs;
+  const ot = box.liveOvertimeSecs;
+  const isOvertime = rem < 0;
+  const isPaused = box.status === 'paused';
+  const pct = Math.min(100, box.progressPct);
+  const urgent = !isOvertime && rem <= 60 && rem > 0;
+
+  // CSS classes
+  widget.classList.toggle('overtime', isOvertime);
+  head.classList.toggle('overtime', isOvertime);
+
+  // Head label
+  if (isOvertime) label.textContent = '计划外';
+  else if (isPaused) label.textContent = '暂停';
+  else label.textContent = '倒计时';
+
+  // Time display
+  if (isOvertime) time.textContent = '+' + fmtTime(ot);
+  else time.textContent = fmtTime(Math.max(0, rem));
+  time.className = 'fw-time'
+    + (isOvertime ? ' overtime' : (urgent ? ' urgent' : ''))
+    + (isPaused ? ' paused' : '');
+
+  // Task name
+  task.textContent = box.taskName || '(未知任务)';
+  task.title = box.taskName || '';
+
+  // Overtime tag
+  otTag.style.display = isOvertime ? '' : 'none';
+  if (isOvertime) otTag.textContent = '计划外 +' + fmtTime(ot);
+
+  // Progress bar
+  fill.style.width = pct + '%';
+  fill.className = 'fw-fill' + (isOvertime ? ' overtime' : (urgent ? ' urgent' : ''));
+
+  // Status line
+  const parts = [];
+  if (isPaused) parts.push('已暂停');
+  else parts.push('运行中');
+  parts.push('已用 ' + fmtTime(box.workedSecs));
+  status.textContent = parts.join(' · ');
+}
+
+// ── Poll every second ──
+setInterval(async () => {
+  const b = await fetchActive();
+  if (b !== null || connected) {
+    box = b;
+    updateUI();
+  }
+}, 1000);
+
+// Initial fetch
+(async () => { box = await fetchActive(); updateUI(); })();
+
+// ── Keep-on-top (best-effort) ──
+let alwaysOnTop = false;
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+    alwaysOnTop = !alwaysOnTop;
+  }
+});
+window.addEventListener('blur', () => {
+  if (alwaysOnTop) {
+    setTimeout(() => { if (alwaysOnTop) window.focus(); }, 500);
+  }
+});
+
+// Notify main page when closing
+window.addEventListener('beforeunload', () => {
+  ch.postMessage({ type: 'float-closed' });
+});
+</script>
+</body>
+</html>
